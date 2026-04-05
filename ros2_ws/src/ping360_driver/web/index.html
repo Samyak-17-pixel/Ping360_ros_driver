@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ping360 — topic explorer</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/eventemitter2@6.4.9/lib/eventemitter2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/roslib@1/build/roslib.min.js"></script>
+    <script src="turbo_lut.js"></script>
+    <script src="viz.js"></script>
+    <script src="topic_explorer.js"></script>
+    <script src="message_viz.js"></script>
+  </head>
+  <body>
+    <header class="hero">
+      <div>
+        <h1>Ping360 viewer</h1>
+        <p class="sub">
+          <code id="ws-url">ws://127.0.0.1:9090</code> · Active
+          <code id="topic-display">—</code>
+          <span class="type-pill mono" id="topic-type-pill"></span>
+        </p>
+      </div>
+      <div class="hud" id="hud">
+        <span class="pill off" id="pill-conn">disconnected</span>
+        <span class="pill" id="pill-fps">— fps</span>
+        <span class="pill mono" id="pill-stamp">stamp —</span>
+        <span class="pill mono" id="pill-size">—</span>
+      </div>
+    </header>
+
+    <section class="topic-explorer panel">
+      <div class="topic-toolbar">
+        <h3 class="topic-h">ROS topics</h3>
+        <button type="button" class="btn-secondary sm" id="btn-refresh-topics">Refresh</button>
+        <input type="search" id="topic-filter" class="topic-search" placeholder="Filter by name or type…" />
+        <span class="hint mono" id="topic-list-status"></span>
+      </div>
+      <p class="topic-help">
+        Click a row or <strong>View</strong> to subscribe and preview. Requires
+        <code>rosapi</code> (included in the launch file). Use manual entry if the list is empty.
+      </p>
+      <div class="topic-table-wrap">
+        <table class="topic-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Topic</th>
+              <th>Message type</th>
+              <th>Hz</th>
+            </tr>
+          </thead>
+          <tbody id="topic-rows"></tbody>
+        </table>
+      </div>
+      <div class="manual-topic panel-inner">
+        <strong>Manual</strong> (any topic / type)
+        <input type="text" id="manual-topic" placeholder="/your/topic" class="manual-inp" />
+        <input
+          type="text"
+          id="manual-type"
+          placeholder="package_msgs/msg/YourMsg"
+          class="manual-inp wide"
+        />
+        <button type="button" id="btn-manual-apply" class="btn-secondary sm">Subscribe</button>
+      </div>
+    </section>
+
+    <section class="controls-bar" id="controls-image">
+      <span class="controls-label">Image options</span>
+      <label class="inline"><input type="checkbox" id="opt-polar-deg" checked /> Bearing ° labels</label>
+      <label class="inline"><input type="checkbox" id="opt-polar-range" checked /> Range 0.2–1.0 labels</label>
+      <label class="inline"><input type="checkbox" id="opt-grid" checked /> Polar grid</label>
+      <label class="inline"><input type="checkbox" id="opt-polar-clahe" checked /> CLAHE polar (turbo)</label>
+      <label class="inline">Polar skip bins
+        <input type="number" id="opt-polar-gate" value="0" min="0" max="2000" step="1" title="Map only echo bins after this index onto the fan (reduces bright near-field in the inner ring)" />
+      </label>
+      <label class="inline"><input type="checkbox" id="opt-clahe" checked /> CLAHE (rect)</label>
+      <label class="inline">CLAHE clip <input type="number" id="opt-clip" value="3" min="1" max="8" step="0.5" /></label>
+      <label class="inline">Tile px <input type="number" id="opt-tile" value="48" min="16" max="128" step="8" /></label>
+      <label class="inline"><input type="checkbox" id="opt-rectgray" /> Raw rectangle (gray)</label>
+      <label class="inline">Polar size <input type="range" id="opt-polarsz" min="320" max="720" value="480" /></label>
+      <span class="hint mono" id="polar-sz-label">480 px</span>
+      <label class="inline"><input type="checkbox" id="opt-montage" checked /> Polar montage (3×4 = 12 scans)</label>
+      <span class="hint">Last 12 scans, turbo — like “run5 — polar fan (sampled)”</span>
+    </section>
+
+    <div id="viz-placeholder" class="viz-placeholder">
+      <p>Select a topic above to see its message shape (JSON) and a visual when supported.</p>
+    </div>
+
+    <section class="viz-card montage-section montage-first" id="montage-section" hidden>
+      <div class="viz-head">
+        <h2>Polar montage <span class="tag">turbo, sampled</span></h2>
+        <p class="cap">
+          3×4 — same style as “run6 — polar fan (turbo, sampled)”. Time advances left → right, top → bottom.
+        </p>
+      </div>
+      <div class="montage-grid" id="montage-grid"></div>
+    </section>
+
+    <section class="viz-grid" id="viz-panel-image" hidden>
+      <article class="viz-card">
+        <div class="viz-head">
+          <h2>Polar fan <span class="tag">CLAHE + turbo</span></h2>
+          <p class="cap">sensor_msgs/Image (mono8 / 8UC1)</p>
+        </div>
+        <div class="canvas-wrap polar">
+          <canvas id="canvas-polar" width="480" height="480"></canvas>
+        </div>
+        <div class="rb-readout" id="rb-readout">
+          <h3 class="rb-title">Range &amp; bearing</h3>
+          <dl class="rb-dl">
+            <dt>Bearing</dt>
+            <dd id="rb-bearing">—</dd>
+            <dt>Range (m)</dt>
+            <dd id="rb-range-m">—</dd>
+            <dt>Range (0–1)</dt>
+            <dd id="rb-range-norm">—</dd>
+            <dt>Peak row, col</dt>
+            <dd id="rb-peak-cell">—</dd>
+            <dt>Intensity</dt>
+            <dd id="rb-intensity">—</dd>
+          </dl>
+          <p class="rb-source" id="rb-source"></p>
+          <p class="rb-hint hint">
+            Estimates use the brightest pixel in the image. With the Ping360 driver, subscribe so
+            <code>/ping360/derived</code> and <code>/ping360/auto_device_data</code> are publishing for
+            device-accurate range and bearing.
+          </p>
+        </div>
+      </article>
+      <article class="viz-card">
+        <div class="viz-head">
+          <h2>Rectangular <span class="tag">CLAHE + turbo</span></h2>
+          <p class="cap">Equalized + colormap</p>
+        </div>
+        <div class="canvas-wrap rect">
+          <canvas id="canvas-rect-turbo"></canvas>
+        </div>
+      </article>
+    </section>
+
+    <section class="viz-grid single" id="row-raw" hidden>
+      <article class="viz-card wide">
+        <div class="viz-head">
+          <h2>Rectangular <span class="tag">mono8</span></h2>
+        </div>
+        <div class="canvas-wrap rect">
+          <canvas id="canvas-rect-gray"></canvas>
+        </div>
+      </article>
+    </section>
+
+    <section class="viz-card single-viz" id="viz-panel-laser" hidden>
+      <div class="viz-head">
+        <h2>LaserScan <span class="tag">polar</span></h2>
+        <p class="cap">sensor_msgs/LaserScan — ranges vs angle</p>
+      </div>
+      <div class="canvas-wrap polar">
+        <canvas id="canvas-laser" width="480" height="480"></canvas>
+      </div>
+    </section>
+
+    <section class="viz-card single-viz" id="viz-panel-scalar" hidden>
+      <div class="viz-head">
+        <h2>Value</h2>
+      </div>
+      <div class="scalar-box mono" id="viz-scalar-value">—</div>
+    </section>
+
+    <section class="viz-card single-viz" id="viz-panel-string" hidden>
+      <div class="viz-head">
+        <h2>String</h2>
+      </div>
+      <pre class="string-pre" id="viz-string-value"></pre>
+    </section>
+
+    <section class="viz-card single-viz" id="viz-panel-note" hidden>
+      <div class="viz-head">
+        <h2>Preview</h2>
+      </div>
+      <p class="note-p" id="viz-note-text"></p>
+    </section>
+
+    <section class="panel full json-panel">
+      <h3>Last message <span class="json-tag mono" id="json-topic-label"></span></h3>
+      <pre id="message-json"></pre>
+    </section>
+
+    <section class="side-panels">
+      <div class="panel record">
+        <h3>Recording</h3>
+        <label>Output dir <input type="text" id="rec-dir" placeholder="~/rosbags" /></label>
+        <label>Prefix <input type="text" id="rec-prefix" placeholder="optional" /></label>
+        <div class="row">
+          <button type="button" id="btn-start">Start bag</button>
+          <button type="button" id="btn-stop" class="btn-secondary">Stop</button>
+        </div>
+        <pre id="rec-log"></pre>
+      </div>
+    </section>
+
+    <script src="app.js"></script>
+  </body>
+</html>

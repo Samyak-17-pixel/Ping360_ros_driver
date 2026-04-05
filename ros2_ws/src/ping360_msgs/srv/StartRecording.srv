@@ -1,0 +1,8 @@
+# Start recording selected topics to a rosbag2 (SQLite) file
+string output_directory   # e.g. /home/user/rosbags
+string bag_name_prefix    # timestamp appended if empty
+string[] topics           # empty = default Ping360 topic set
+---
+bool success
+string message
+string bag_path
