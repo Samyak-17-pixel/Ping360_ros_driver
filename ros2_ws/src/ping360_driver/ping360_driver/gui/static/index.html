@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Ping360 Viewer</title>
+    <link rel="stylesheet" href="/static/style.css?v=20260411" />
+  </head>
+  <body class="">
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-title">Ping360 Viewer</div>
+        <div class="status-stack">
+          <div class="status">
+            <span id="connDot" class="dot idle"></span>
+            <span id="connText">Rosbridge off</span>
+          </div>
+          <div id="rosbridgeDetail" class="status-sub">Loading…</div>
+          <div id="sensorStreamLine" class="status-sub muted">Sensor: —</div>
+          <details id="rosbridgeFixWrap" class="rosbridge-fix" style="display: none">
+            <summary>Rosbridge unreachable from this viewer server — update target</summary>
+            <p id="rosbridgeFixExplain" class="status-sub warn"></p>
+            <form id="rosbridgeFixForm" class="rosbridge-fix-form">
+              <input type="password" id="rosbridgeFixPass" name="password" autocomplete="current-password" placeholder="Jetson SSH password" required />
+              <input type="text" id="rosbridgeFixUrl" name="rosbridge" autocomplete="off" placeholder="ws://host:port or host:port" />
+              <button type="submit" class="btn primary">Apply &amp; reconnect</button>
+            </form>
+          </details>
+        </div>
+      </div>
+
+      <div class="controls">
+        <label class="soft-toggle" title="On: keep link; WiFi loss pauses stream and retries until you turn off">
+          <input type="checkbox" id="rosbridgeToggle" class="soft-toggle-input" role="switch" checked />
+          <span class="soft-toggle-track" aria-hidden="true"><span class="soft-toggle-thumb"></span></span>
+          <span class="soft-toggle-label">Rosbridge</span>
+        </label>
+        <div class="divider"></div>
+        <div class="control">
+          <div class="control-label">Ping360 topic</div>
+          <select id="topicSelect" class="select"></select>
+        </div>
+        <div class="control">
+          <div class="control-label">Show</div>
+          <select id="topicFilter" class="select">
+            <option value="ping360" selected>Ping360-only</option>
+            <option value="all">All topics</option>
+          </select>
+        </div>
+
+        <div class="control">
+          <div class="control-label">FOV (deg)</div>
+          <input id="fovDeg" type="number" min="1" max="360" step="1" value="360" />
+        </div>
+        <div class="control">
+          <div class="control-label">Max range (m)</div>
+          <input id="rangeMax" type="number" min="0.1" max="500" step="0.1" value="10" />
+        </div>
+        <div class="control">
+          <div class="control-label">Bearing offset (deg)</div>
+          <input id="bearingOffset" type="number" min="-180" max="180" step="0.1" value="0" />
+        </div>
+
+        <div class="divider"></div>
+
+        <button id="btnRecord" class="btn" style="display:none">Start recording</button>
+        <button id="btnStopRecord" class="btn" style="display:none">Stop recording</button>
+
+        <select id="bagSelect" class="select" style="display:none"></select>
+        <button id="btnPlay" class="btn" style="display:none">Play bag</button>
+        <button id="btnStopPlay" class="btn" style="display:none">Stop play</button>
+
+        <div class="divider"></div>
+
+        <button id="btnDownload" class="btn">Record UI (mp4/webm)</button>
+        <form method="post" action="/logout" style="display:inline">
+          <button class="btn ghost" type="submit">Logout</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="layout">
+      <div class="panel panel-main" id="mainPanel">
+        <div class="panel-title">
+          <span class="panel-title-text">Live topic</span>
+          <span class="meta" id="imgMeta"></span>
+          <span class="meta view-pill" id="viewLabel">Raw</span>
+        </div>
+        <div class="tabs">
+          <button class="tab active" data-tab="raw">Raw</button>
+          <button class="tab" data-tab="polar">Polar</button>
+          <button class="tab" data-tab="polar_turbo">Polar TURBO</button>
+          <button class="tab" data-tab="rect_clahe">Rect CLAHE</button>
+          <button class="tab" data-tab="bearing">Bearing peaks</button>
+          <button class="tab" data-tab="hist">Histogram</button>
+        </div>
+
+        <div class="viz-toolbar" id="vizToolbar">
+          <label class="viz-opt" title="Contrast limiting (higher = more local contrast)">
+            <span>CLAHE clip</span>
+            <input type="number" id="vizClaheClip" min="1" max="16" step="0.5" value="3" />
+          </label>
+          <label class="viz-opt" title="Tile size in pixels (rectangular CLAHE)">
+            <span>Tile px</span>
+            <input type="number" id="vizClaheTile" min="8" max="128" step="8" value="48" />
+          </label>
+          <label class="viz-chk" title="Draw range rings and bearing rays">
+            <input type="checkbox" id="vizPolarGrid" checked />
+            <span>Polar grid</span>
+          </label>
+          <label class="viz-chk" title="Degree labels on polar views">
+            <input type="checkbox" id="vizPolarLabels" checked />
+            <span>Bearing labels</span>
+          </label>
+          <label class="viz-chk" title="Show estimated range on rings (fraction of max range)">
+            <input type="checkbox" id="vizRangeLabels" checked />
+            <span>Range labels</span>
+          </label>
+        </div>
+
+        <div class="canvas-wrap">
+          <canvas id="mainCanvas" width="960" height="640"></canvas>
+          <div id="hoverReadout" class="hover-readout"></div>
+        </div>
+
+        <div class="readouts">
+          <div class="readout">
+            <div class="k">Bearing</div>
+            <div class="v" id="bearingReadout">—</div>
+          </div>
+          <div class="readout">
+            <div class="k">Range</div>
+            <div class="v" id="rangeReadout">—</div>
+          </div>
+          <div class="readout">
+            <div class="k">Intensity</div>
+            <div class="v" id="intensityReadout">—</div>
+          </div>
+          <div class="readout">
+            <div class="k">Frame</div>
+            <div class="v" id="frameReadout">0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="side">
+        <div class="panel">
+          <div class="panel-title">What you’re seeing</div>
+          <div class="help">
+            - Rosbridge status is shown in the top bar; use <b>Rosbridge link</b> to stay connected.<br/>
+            - When WiFi drops, the link shows <b>Detached</b> and retries automatically until you turn the toggle off.<br/>
+            - Pick Ping360 topics from the dropdown; topic list refreshes every few seconds.<br/>
+            - Range/bearing for images are derived from your FOV / max range settings.
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Advanced</div>
+          <div class="help">
+            If your driver publishes true Ping360 angle/range metadata (not just an image),
+            we can switch to that for accurate scale and better plots.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/app.js?v=20260411-turbo-clahe"></script>
+  </body>
+</html>
+

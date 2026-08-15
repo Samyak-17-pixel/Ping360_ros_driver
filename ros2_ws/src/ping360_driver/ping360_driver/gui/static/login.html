@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Ping360 Viewer - Login</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body class="auth">
+    <div class="auth-card">
+      <div class="auth-title">Ping360 Viewer</div>
+      <div class="auth-subtitle">Same-machine: use <code>127.0.0.1</code> (SSH optional). Remote: Jetson SSH credentials.</div>
+
+      <form method="post" action="/login" class="auth-form">
+        <label class="field">
+          <div class="label">Host (or user@ip[:rosbridge_port])</div>
+          <input name="username" autocomplete="username" placeholder="127.0.0.1 or mavlab@192.168.1.50:9090" required />
+        </label>
+        <label class="field">
+          <div class="label">Rosbridge WebSocket (optional override)</div>
+          <input name="rosbridge" placeholder="127.0.0.1:9090" />
+        </label>
+        <label class="field">
+          <div class="label">SSH password (not required for 127.0.0.1)</div>
+          <input name="password" type="password" autocomplete="current-password" />
+        </label>
+        <button class="btn primary" type="submit">Sign in</button>
+      </form>
+
+      <div class="auth-footnote">
+        Tip: you’ll browse to <code>http://&lt;jetson-ip&gt;:8080</code> when connected to WiFi.
+        Rosbridge is opened by the <strong>machine running Ping360 Viewer</strong> (not only the browser). If the viewer runs on your laptop, use the Jetson’s LAN address for rosbridge, or an SSH tunnel and override <code>127.0.0.1:PORT</code> on <strong>that laptop</strong>.
+      </div>
+    </div>
+  </body>
+</html>
+

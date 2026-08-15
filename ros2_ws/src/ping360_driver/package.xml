@@ -3,7 +3,7 @@
 <package format="3">
   <name>ping360_driver</name>
   <version>1.0.0</version>
-  <description>Ping360 USB serial driver, recorder services, and web UI assets for ROS 2 Humble. Optional: apt install ros-humble-rosbridge-suite for the browser UI (WebSocket).</description>
+  <description>Ping360 USB serial driver, recorder, FastAPI viewer GUI, and static web explorer for ROS 2 Humble.</description>
   <maintainer email="user@example.com">user</maintainer>
   <license>Apache-2.0</license>
   <buildtool_depend>ament_python</buildtool_depend>

@@ -142,7 +142,7 @@ class Ping360DriverNode(Node):
 
         self.get_logger().info(
             f"Ping360 driver: port={port} frame_id={self._frame_id} "
-            f"(topics under ~/ping360/*)"
+            f"(topics under /ping360/*)"
         )
 
     def _publish_static_tf(self) -> None:
