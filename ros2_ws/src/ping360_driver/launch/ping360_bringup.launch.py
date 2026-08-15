@@ -2,20 +2,21 @@
 
 import os
 
-from ament_index_python.packages import PackageNotFoundError, get_package_prefix, get_package_share_directory
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import ExecuteProcess, LogInfo
+from launch.actions import DeclareLaunchArgument, LogInfo
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+
+from ping360_driver.launch_helpers import gui_node, http_server, rosapi_node, rosbridge_or_hint
 
 
 def generate_launch_description() -> LaunchDescription:
-    web_root = os.path.join(get_package_share_directory("ping360_driver"), "web")
+    share = get_package_share_directory("ping360_driver")
+    params_file = os.path.join(share, "config", "ping360_driver.yaml")
 
-    try:
-        get_package_prefix("rosbridge_server")
-        have_rosbridge = True
-    except PackageNotFoundError:
-        have_rosbridge = False
+    serial_port = LaunchConfiguration("serial_port")
+    baud_rate = LaunchConfiguration("baud_rate")
 
     driver = Node(
         package="ping360_driver",
@@ -23,12 +24,11 @@ def generate_launch_description() -> LaunchDescription:
         name="ping360_driver",
         output="screen",
         parameters=[
+            params_file,
             {
-                "serial_port": "/dev/ttyUSB0",
-                "baud_rate": 115200,
-                "frame_id": "ping360_link",
-                "publish_tf_static": False,
-            }
+                "serial_port": serial_port,
+                "baud_rate": baud_rate,
+            },
         ],
     )
 
@@ -39,54 +39,16 @@ def generate_launch_description() -> LaunchDescription:
         output="screen",
     )
 
-    rosapi = Node(
-        package="rosapi",
-        executable="rosapi_node",
-        name="rosapi",
-        output="screen",
-    )
-
-    rosbridge = Node(
-        package="rosbridge_server",
-        executable="rosbridge_websocket",
-        name="rosbridge_websocket",
-        output="screen",
-        parameters=[
-            {"port": 9090},
-            {"max_message_size": 100000000},
-        ],
-    )
-
-    http_server = ExecuteProcess(
-        cmd=["python3", "-m", "http.server", "8765", "--bind", "127.0.0.1", "--directory", web_root],
-        output="screen",
-    )
-
     actions = [
+        DeclareLaunchArgument("serial_port", default_value="/dev/ttyUSB0"),
+        DeclareLaunchArgument("baud_rate", default_value="115200"),
         driver,
         recorder,
-        rosapi,
+        rosapi_node(),
+        *rosbridge_or_hint(playback=False),
+        gui_node(),
+        http_server(),
+        LogInfo(msg="Ping360 GUI: http://127.0.0.1:8080  (login host 127.0.0.1; rosbridge ws://127.0.0.1:9090)."),
+        LogInfo(msg="Static topic explorer: http://127.0.0.1:8765"),
     ]
-    if have_rosbridge:
-        actions.append(rosbridge)
-        actions.append(
-            LogInfo(
-                msg="rosbridge_server: WebSocket on ws://127.0.0.1:9090 — open http://127.0.0.1:8765 for the UI."
-            )
-        )
-    else:
-        actions.append(
-            LogInfo(
-                msg=(
-                    "rosbridge_server is not installed — driver and recorder are running, but the browser UI "
-                    "needs a bridge. Install: sudo apt install ros-humble-rosbridge-suite "
-                    "then relaunch (or run: ros2 run rosbridge_server rosbridge_websocket)."
-                )
-            )
-        )
-    actions.append(http_server)
-    actions.append(
-        LogInfo(msg="Static web UI: http://127.0.0.1:8765 (requires rosbridge for live data).")
-    )
-
     return LaunchDescription(actions)

@@ -47,7 +47,11 @@ Thumbs.db
 *.db3
 
 # -----------------------------------------------------------------------------
-# Optional: pytest / coverage
+# FastAPI GUI session secret (created at runtime)
+.data/
+
+# Nested leftover GUI clone (source now lives in ping360_driver/gui)
+Ping360_GUI/.git/
 # -----------------------------------------------------------------------------
 .pytest_cache/
 .coverage
